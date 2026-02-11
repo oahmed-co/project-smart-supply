@@ -1,0 +1,115 @@
+package ma.smartsupply.service;
+
+import ma.smartsupply.dto.ProduitRequest;
+import ma.smartsupply.dto.ProduitResponse;
+import ma.smartsupply.model.Fournisseur;
+import ma.smartsupply.model.Produit;
+import ma.smartsupply.model.Stock;
+import ma.smartsupply.model.Utilisateur;
+import ma.smartsupply.repository.ProduitRepository;
+import ma.smartsupply.repository.StockRepository;
+import ma.smartsupply.repository.UtilisateurRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class ProduitService {
+
+    private final ProduitRepository produitRepository;
+    private final StockRepository stockRepository;
+    private final UtilisateurRepository utilisateurRepository;
+
+
+    @Transactional
+    public ProduitResponse ajouterProduit(ProduitRequest request, String emailFournisseur) {
+
+        Utilisateur utilisateur = utilisateurRepository.findByEmail(emailFournisseur)
+                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé"));
+
+        if (!(utilisateur instanceof Fournisseur)) {
+            throw new RuntimeException("Seul un fournisseur peut ajouter des produits");
+        }
+        Fournisseur fournisseur = (Fournisseur) utilisateur;
+
+
+        Produit produit = Produit.builder()
+                .nom(request.getNom())
+                .prix(request.getPrix())
+                .description(request.getDescription())
+                .image(request.getImage())
+                .fournisseur(fournisseur)
+                .build();
+
+        produit = produitRepository.save(produit);
+
+
+        Stock stock = Stock.builder()
+                .produit(produit)
+                .quantiteDisponible(request.getQuantiteInitiale())
+                .seuilAlerte(request.getSeuilAlerte())
+                .build();
+
+        stockRepository.save(stock);
+        produit.setStock(stock);
+
+        return mapToResponse(produit);
+    }
+
+
+    public List<ProduitResponse> getAllProduits() {
+        return produitRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+
+    public List<ProduitResponse> getMesProduits(String emailFournisseur) {
+        Utilisateur user = utilisateurRepository.findByEmail(emailFournisseur).orElseThrow();
+        return produitRepository.findByFournisseurId(user.getId()).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+
+    public ProduitResponse updateStock(Long produitId, Integer nouvelleQuantite, String emailFournisseur) {
+        Produit produit = produitRepository.findById(produitId)
+                .orElseThrow(() -> new RuntimeException("Produit non trouvé"));
+
+
+        if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
+            throw new RuntimeException("Accès refusé à ce produit");
+        }
+
+        Stock stock = produit.getStock();
+        stock.setQuantiteDisponible(nouvelleQuantite);
+        stockRepository.save(stock);
+
+
+        return mapToResponse(produit);
+    }
+
+
+    private ProduitResponse mapToResponse(Produit p) {
+        boolean isAlerte = false;
+        if (p.getStock() != null) {
+            isAlerte = p.getStock().getQuantiteDisponible() <= p.getStock().getSeuilAlerte();
+        }
+
+        return ProduitResponse.builder()
+                .id(p.getId())
+                .nom(p.getNom())
+                .prix(p.getPrix())
+                .description(p.getDescription())
+                .image(p.getImage())
+                .nomFournisseur(p.getFournisseur().getNomEntreprise())
+                .quantiteDisponible(p.getStock() != null ? p.getStock().getQuantiteDisponible() : 0)
+                .alerteStock(isAlerte)
+                .build();
+    }
+}
