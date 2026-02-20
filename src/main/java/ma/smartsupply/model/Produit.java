@@ -21,16 +21,14 @@ public class Produit {
     private String description;
     private String image;
 
-
     private Integer quantiteStock;
     private Integer seuilAlerte;
-
 
     @ManyToOne
     @JoinColumn(name = "fournisseur_id")
     private Fournisseur fournisseur;
 
-
+    @JsonIgnore
     @OneToOne(mappedBy = "produit", cascade = CascadeType.ALL)
     private Stock stock;
 }

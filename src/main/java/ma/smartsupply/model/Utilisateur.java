@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import ma.smartsupply.enums.Role;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -29,23 +30,16 @@ public abstract class Utilisateur implements UserDetails {
 
     @Column(unique = true, nullable = false)
     private String email;
-
     private String motDePasse;
-
     private String telephone;
-
     private String adresse;
-
     private String tokenNotification;
-
-
-    private String role;
-
-
+    @Enumerated(EnumType.STRING)
+    private Role role;
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
 
-        return List.of(new SimpleGrantedAuthority("ROLE_" + this.role));
+        return List.of(new SimpleGrantedAuthority(this.role.name()));
     }
 
     @Override
@@ -53,7 +47,6 @@ public abstract class Utilisateur implements UserDetails {
 
         return this.motDePasse;
     }
-
     @Override
     public String getUsername() {
 

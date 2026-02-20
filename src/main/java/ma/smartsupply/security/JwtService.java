@@ -16,8 +16,6 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-
-
     private static final String SECRET_KEY = "c21hcnRzdXBwbHlzZWNyZXRrZXlnZW5uhZXJhdGlvbmbvcmVzZWN1cml0eQ==";
 
     public String extractUsername(String token) {
@@ -30,7 +28,17 @@ public class JwtService {
     }
 
     public String generateToken(UserDetails userDetails) {
-        return generateToken(new HashMap<>(), userDetails);
+        Map<String, Object> extraClaims = new HashMap<>();
+
+        if (userDetails instanceof ma.smartsupply.model.Utilisateur) {
+            ma.smartsupply.model.Utilisateur customUser = (ma.smartsupply.model.Utilisateur) userDetails;
+
+            extraClaims.put("role", customUser.getRole());
+
+
+            extraClaims.put("userId", customUser.getId());
+        }
+        return generateToken(extraClaims, userDetails);
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
@@ -38,7 +46,7 @@ public class JwtService {
                 .claims(extraClaims)
                 .subject(userDetails.getUsername())
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24)) // 24 heures
+                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
                 .signWith(getSignInKey())
                 .compact();
     }

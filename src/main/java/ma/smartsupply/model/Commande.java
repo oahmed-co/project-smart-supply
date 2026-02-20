@@ -25,11 +25,9 @@ public class Commande {
     @Enumerated(EnumType.STRING)
     private StatutCommande statut;
 
-
     @ManyToOne
     @JoinColumn(name = "client_id")
     private Client client;
-
 
     @OneToMany(mappedBy = "commande", cascade = CascadeType.ALL)
     private List<LigneCommande> lignes = new ArrayList<>();

@@ -27,7 +27,6 @@ public class Stock {
     @JsonIgnore
     private Produit produit;
 
-
     public boolean estEnAlerte() {
         return quantiteDisponible <= seuilAlerte;
     }

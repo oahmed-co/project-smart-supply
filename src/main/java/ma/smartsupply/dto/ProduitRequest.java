@@ -8,7 +8,6 @@ public class ProduitRequest {
     private Double prix;
     private String description;
     private String image;
-
     private Integer quantiteInitiale;
     private Integer seuilAlerte;
 }

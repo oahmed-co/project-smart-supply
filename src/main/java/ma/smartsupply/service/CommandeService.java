@@ -6,6 +6,7 @@ import ma.smartsupply.enums.StatutCommande;
 import ma.smartsupply.model.*;
 import ma.smartsupply.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,108 +22,125 @@ public class CommandeService {
     private final ProduitRepository produitRepository;
     private final UtilisateurRepository utilisateurRepository;
     private final StockRepository stockRepository;
+    private final NotificationService notificationService;
+
+    public List<Commande> getMesCommandes(String email) {
+        return commandeRepository.findAll();
+    }
 
     @Transactional
-    public Commande passerCommande(CommandeRequest request, String emailClient) {
+    public Commande passerCommande(CommandeRequest request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
-
-        Utilisateur user = utilisateurRepository.findByEmail(emailClient)
+        Utilisateur utilisateur = utilisateurRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
 
-
-        if (!(user instanceof Client)) {
-            throw new RuntimeException("Erreur : L'utilisateur connecté n'est pas un Client.");
+        if (!(utilisateur instanceof Client)) {
+            throw new RuntimeException("Seuls les clients peuvent passer des commandes.");
         }
-        Client client = (Client) user;
+        Client client = (Client) utilisateur;
 
 
-        Commande commande = Commande.builder()
-                .client(client)
-                .dateCreation(LocalDateTime.now())
-                .statut(StatutCommande.EN_ATTENTE_VALIDATION)
-                .montantTotal(0.0)
-                .lignes(new ArrayList<>())
-                .build();
+        Commande commande = new Commande();
+        commande.setClient(client);
+        commande.setDateCreation(LocalDateTime.now());
+        commande.setStatut(StatutCommande.EN_ATTENTE_VALIDATION);
+        commande.setLignes(new ArrayList<>());
 
-        double total = 0.0;
+        double montantTotal = 0;
 
 
-        for (LigneCommandeRequest ligneReq : request.getLignes()) {
-            Produit produit = produitRepository.findById(ligneReq.getProduitId())
-                    .orElseThrow(() -> new RuntimeException("Produit introuvable : " + ligneReq.getProduitId()));
+        for (LigneCommandeRequest lcr : request.getLignes()) {
+            Produit produit = produitRepository.findById(lcr.getProduitId())
+                    .orElseThrow(() -> new RuntimeException("Produit introuvable : " + lcr.getProduitId()));
 
-            Stock stock = produit.getStock();
+            Stock stock = stockRepository.findByProduitId(produit.getId())
+                    .orElseThrow(() -> new RuntimeException("Le stock n'existe pas pour le produit : " + produit.getNom()));
 
-            if (stock == null) {
-                throw new RuntimeException("Le produit " + produit.getNom() + " n'a pas de stock associé !");
+            int stockDispo = (stock.getQuantiteDisponible() != null) ? stock.getQuantiteDisponible() : 0;
+
+            if (stockDispo < lcr.getQuantite()) {
+                throw new RuntimeException("Stock insuffisant pour : " + produit.getNom() +
+                        " (Dispo: " + stockDispo + ", Demandé: " + lcr.getQuantite() + ")");
             }
 
-            if (stock.getQuantiteDisponible() < ligneReq.getQuantite()) {
-                throw new RuntimeException("Stock insuffisant pour le produit : " + produit.getNom());
-            }
+            stock.setQuantiteDisponible(stockDispo - lcr.getQuantite());
+            stockRepository.save(stock);
 
-            LigneCommande ligne = LigneCommande.builder()
-                    .produit(produit)
-                    .commande(commande)
-                    .quantite(ligneReq.getQuantite())
-                    .sousTotal(produit.getPrix() * ligneReq.getQuantite())
-                    .build();
+            notificationService.creer(
+                    produit.getFournisseur(),
+                    "Nouvelle commande pour votre produit : " + produit.getNom() + " (Quantité: " + lcr.getQuantite() + ")"
+            );
+
+            LigneCommande ligne = new LigneCommande();
+            ligne.setCommande(commande);
+            ligne.setProduit(produit);
+            ligne.setQuantite(lcr.getQuantite());
+
+            double sousTotal = produit.getPrix() * lcr.getQuantite();
+            ligne.setSousTotal(sousTotal);
 
             commande.getLignes().add(ligne);
-            total += ligne.getSousTotal();
+            montantTotal += sousTotal;
         }
 
-        commande.setMontantTotal(total);
+        commande.setMontantTotal(montantTotal);
+
         return commandeRepository.save(commande);
     }
 
     @Transactional
     public Commande validerCommande(Long commandeId, String emailFournisseur) {
 
-
         Commande commande = commandeRepository.findById(commandeId)
                 .orElseThrow(() -> new RuntimeException("Commande introuvable"));
-
 
         if (commande.getStatut() != StatutCommande.EN_ATTENTE_VALIDATION) {
             throw new RuntimeException("Cette commande ne peut plus être validée");
         }
 
-
-
-
         for (LigneCommande ligne : commande.getLignes()) {
-            Produit produit = ligne.getProduit();
-            Stock stock = produit.getStock();
-
-
-            if (stock == null) {
-                throw new RuntimeException("Erreur critique : Stock introuvable pour " + produit.getNom());
-            }
-
-            int nouvelleQuantite = stock.getQuantiteDisponible() - ligne.getQuantite();
-
-            if (nouvelleQuantite < 0) {
-                throw new RuntimeException("Stock insuffisant lors de la validation pour : " + produit.getNom());
-            }
-
-
-            stock.setQuantiteDisponible(nouvelleQuantite);
-            stock.setDateDerniereMiseAJour(LocalDateTime.now());
-            stockRepository.save(stock);
-
+            Stock stock = stockRepository.findByProduitId(ligne.getProduit().getId())
+                    .orElseThrow(() -> new RuntimeException("Stock introuvable"));
 
             if (stock.estEnAlerte()) {
-                System.out.println("⚠️ ALERTE STOCK : " + produit.getNom());
+                System.out.println("️ ALERTE STOCK : " + ligne.getProduit().getNom());
+            }
+        }
+        commande.setStatut(StatutCommande.VALIDEE);
+        Commande commandeMaj = commandeRepository.save(commande);
+
+        notificationService.creer(
+                commande.getClient(),
+                " Votre commande n°" + commande.getId() + " a été validée."
+        );
+
+        return commandeMaj;
+    }
+
+    @Transactional
+    public Commande changerStatutCommande(Long commandeId, StatutCommande nouveauStatut) {
+
+        Commande commande = commandeRepository.findById(commandeId)
+                .orElseThrow(() -> new RuntimeException("Commande introuvable avec l'ID : " + commandeId));
+
+
+        if (nouveauStatut == StatutCommande.ANNULEE && commande.getStatut() != StatutCommande.ANNULEE) {
+            for (LigneCommande ligne : commande.getLignes()) {
+                Stock stock = stockRepository.findByProduitId(ligne.getProduit().getId())
+                        .orElseThrow(() -> new RuntimeException("Stock introuvable"));
+
+                stock.setQuantiteDisponible(stock.getQuantiteDisponible() + ligne.getQuantite());
+                stockRepository.save(stock);
             }
         }
 
+        commande.setStatut(nouveauStatut);
+        Commande commandeMiseAJour = commandeRepository.save(commande);
 
-        commande.setStatut(StatutCommande.VALIDEE);
-        return commandeRepository.save(commande);
-    }
+        String message = "Mise à jour : Votre commande #" + commande.getId() + " est maintenant " + nouveauStatut.name();
+        notificationService.creer(commande.getClient(), message);
 
-    public List<Commande> getMesCommandes(String email) {
-        return commandeRepository.findAll();
+        return commandeMiseAJour;
     }
 }

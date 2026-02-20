@@ -45,9 +45,7 @@ public class ProduitService {
                 .image(request.getImage())
                 .fournisseur(fournisseur)
                 .build();
-
         produit = produitRepository.save(produit);
-
 
         Stock stock = Stock.builder()
                 .produit(produit)
@@ -89,16 +87,29 @@ public class ProduitService {
         Stock stock = produit.getStock();
         stock.setQuantiteDisponible(nouvelleQuantite);
         stockRepository.save(stock);
-
-
         return mapToResponse(produit);
     }
 
-
     private ProduitResponse mapToResponse(Produit p) {
+        int quantite = 0;
         boolean isAlerte = false;
+        String nomFournisseur = "Non assigné";
+
+
         if (p.getStock() != null) {
-            isAlerte = p.getStock().getQuantiteDisponible() <= p.getStock().getSeuilAlerte();
+
+            if (p.getStock().getQuantiteDisponible() != null) {
+                quantite = p.getStock().getQuantiteDisponible();
+            }
+
+
+            int seuil = (p.getStock().getSeuilAlerte() != null) ? p.getStock().getSeuilAlerte() : 0;
+
+            isAlerte = quantite <= seuil;
+        }
+
+        if (p.getFournisseur() != null && p.getFournisseur().getNomEntreprise() != null) {
+            nomFournisseur = p.getFournisseur().getNomEntreprise();
         }
 
         return ProduitResponse.builder()
@@ -107,8 +118,8 @@ public class ProduitService {
                 .prix(p.getPrix())
                 .description(p.getDescription())
                 .image(p.getImage())
-                .nomFournisseur(p.getFournisseur().getNomEntreprise())
-                .quantiteDisponible(p.getStock() != null ? p.getStock().getQuantiteDisponible() : 0)
+                .nomFournisseur(nomFournisseur)
+                .quantiteDisponible(quantite)
                 .alerteStock(isAlerte)
                 .build();
     }

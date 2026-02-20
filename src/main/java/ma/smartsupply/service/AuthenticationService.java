@@ -1,6 +1,7 @@
 package ma.smartsupply.service;
 
 import ma.smartsupply.dto.*;
+import ma.smartsupply.enums.Role;
 import ma.smartsupply.model.*;
 import ma.smartsupply.repository.*;
 import ma.smartsupply.security.JwtService;
@@ -21,6 +22,7 @@ public class AuthenticationService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
+
     public AuthenticationResponse register(RegisterRequest request) {
         Utilisateur user;
 
@@ -29,9 +31,9 @@ public class AuthenticationService {
                     .nom(request.getNom())
                     .email(request.getEmail())
                     .motDePasse(passwordEncoder.encode(request.getMotDePasse()))
-                    .role("FOURNISSEUR")
+                    .role(Role.FOURNISSEUR)
                     .telephone(request.getTelephone())
-                    .nomEntreprise(request.getNomEntreprise()) // Spécifique
+                    .nomEntreprise(request.getNomEntreprise())
                     .build();
             fournisseurRepository.save((Fournisseur) user);
         } else {
@@ -39,10 +41,10 @@ public class AuthenticationService {
                     .nom(request.getNom())
                     .email(request.getEmail())
                     .motDePasse(passwordEncoder.encode(request.getMotDePasse()))
-                    .role("CLIENT")
+                    .role(Role.CLIENT)
                     .telephone(request.getTelephone())
                     .adresse(request.getAdresse())
-                    .nomMagasin(request.getNomMagasin()) // Spécifique
+                    .nomMagasin(request.getNomMagasin())
                     .build();
             clientRepository.save((Client) user);
         }

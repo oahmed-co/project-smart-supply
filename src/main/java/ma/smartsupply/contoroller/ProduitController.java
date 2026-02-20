@@ -19,10 +19,10 @@ public class ProduitController {
     private final ProduitService produitService;
 
     @PostMapping
-    @PreAuthorize("hasRole('FOURNISSEUR')")
+    @PreAuthorize("hasAuthority('FOURNISSEUR')")
     public ResponseEntity<ProduitResponse> ajouterProduit(
             @RequestBody ProduitRequest request,
-            Principal principal // Contient l'email de l'utilisateur connecté via JWT
+            Principal principal
     ) {
         return ResponseEntity.ok(produitService.ajouterProduit(request, principal.getName()));
     }
