@@ -2,6 +2,8 @@ package ma.smartsupply.contoroller;
 
 import ma.smartsupply.dto.ProduitRequest;
 import ma.smartsupply.dto.ProduitResponse;
+import ma.smartsupply.model.Produit;
+import ma.smartsupply.model.Stock;
 import ma.smartsupply.service.ProduitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -50,4 +52,41 @@ public class ProduitController {
     ) {
         return ResponseEntity.ok(produitService.updateStock(id, quantite, principal.getName()));
     }
+
+    @PutMapping("/{id}/ajouter-stock")
+    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    public ResponseEntity<Stock> ajouterStock(
+            @PathVariable Long id,
+            @RequestParam int quantite,
+            Principal principal
+    ) {
+        if (quantite <= 0) {
+            throw new IllegalArgumentException("La quantité à ajouter doit être supérieure à 0.");
+        }
+
+        Stock stockMisAJour = produitService.ajouterStock(id, quantite, principal.getName());
+        return ResponseEntity.ok(stockMisAJour);
+    }
+
+    @PutMapping("/{id}/desactiver")
+    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    public ResponseEntity<String> desactiverProduit(
+            @PathVariable Long id,
+            Principal principal
+    ) {
+        produitService.desactiverProduit(id, principal.getName());
+        return ResponseEntity.ok("Le produit a été retiré du catalogue avec succès.");
+    }
+
+    @GetMapping("/recherche")
+    @PreAuthorize("hasAuthority('CLIENT')")
+    public ResponseEntity<List<ProduitResponse>> rechercherProduits(
+            @RequestParam(required = false) String motCle,
+            @RequestParam(defaultValue = "false") boolean enStock
+    ) {
+        List<ProduitResponse> resultats = produitService.rechercherProduits(motCle, enStock);
+        return ResponseEntity.ok(resultats);
+    }
+
+
 }

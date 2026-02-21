@@ -1,11 +1,15 @@
 package ma.smartsupply.service;
 
-import ma.smartsupply.dto.CommandeRequest;
+import ma.smartsupply.dto.*;
+import ma.smartsupply.dto.LigneCommandeInfoDTO;
 import ma.smartsupply.dto.LigneCommandeRequest;
+import ma.smartsupply.dto.ProduitInfoDTO;
 import ma.smartsupply.enums.StatutCommande;
+import ma.smartsupply.enums.TypeNotification;
 import ma.smartsupply.model.*;
 import ma.smartsupply.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +28,9 @@ public class CommandeService {
     private final UtilisateurRepository utilisateurRepository;
     private final StockRepository stockRepository;
     private final NotificationService notificationService;
+
+    @Autowired
+    private PanierRepository panierRepository;
 
     public List<Commande> getMesCommandes(String email) {
         return commandeRepository.findAll();
@@ -69,7 +77,8 @@ public class CommandeService {
 
             notificationService.creer(
                     produit.getFournisseur(),
-                    "Nouvelle commande pour votre produit : " + produit.getNom() + " (Quantité: " + lcr.getQuantite() + ")"
+                    "Nouvelle commande pour votre produit : " + produit.getNom() + " (Quantité: " + lcr.getQuantite() + ")",
+                    TypeNotification.NOUVELLE_COMMANDE
             );
 
             LigneCommande ligne = new LigneCommande();
@@ -112,9 +121,9 @@ public class CommandeService {
 
         notificationService.creer(
                 commande.getClient(),
-                " Votre commande n°" + commande.getId() + " a été validée."
+                " Votre commande n°" + commande.getId() + " a été validée.",
+                TypeNotification.VALIDATION_COMMANDE
         );
-
         return commandeMaj;
     }
 
@@ -139,8 +148,110 @@ public class CommandeService {
         Commande commandeMiseAJour = commandeRepository.save(commande);
 
         String message = "Mise à jour : Votre commande #" + commande.getId() + " est maintenant " + nouveauStatut.name();
-        notificationService.creer(commande.getClient(), message);
-
+        notificationService.creer(commande.getClient(), message, TypeNotification.VALIDATION_COMMANDE);
         return commandeMiseAJour;
+    }
+
+    public List<CommandeResponse> getMesAchats(String emailClient) {
+        return commandeRepository.findByClientEmail(emailClient)
+                .stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<CommandeResponse> getMesVentes(String emailFournisseur) {
+        return commandeRepository.findDistinctByLignes_Produit_Fournisseur_Email(emailFournisseur)
+                .stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    private CommandeResponse mapToDTO(Commande commande) {
+        CommandeResponse dto = new CommandeResponse();
+        dto.setId(commande.getId());
+        dto.setDateCreation(commande.getDateCreation());
+        dto.setMontantTotal(commande.getMontantTotal());
+        dto.setStatut(commande.getStatut().name());
+
+
+        UtilisateurInfoDTO clientDto = new UtilisateurInfoDTO();
+        clientDto.setId(commande.getClient().getId());
+        clientDto.setNom(commande.getClient().getNom());
+        clientDto.setEmail(commande.getClient().getEmail());
+        clientDto.setTelephone(commande.getClient().getTelephone());
+        dto.setClient(clientDto);
+
+        List<LigneCommandeInfoDTO> lignesDto = commande.getLignes().stream().map(ligne -> {
+            LigneCommandeInfoDTO lDto = new LigneCommandeInfoDTO();
+            lDto.setId(ligne.getId());
+            lDto.setQuantite(ligne.getQuantite());
+            lDto.setSousTotal(ligne.getSousTotal());
+
+            ProduitInfoDTO pDto = new ProduitInfoDTO();
+            pDto.setId(ligne.getProduit().getId());
+            pDto.setNom(ligne.getProduit().getNom());
+            pDto.setPrix(ligne.getProduit().getPrix());
+            lDto.setProduit(pDto);
+
+            return lDto;
+        }).collect(Collectors.toList());
+
+        dto.setLignes(lignesDto);
+        return dto;
+    }
+
+    @Transactional
+    public CommandeResponse validerPanier(String emailClient) {
+
+        Panier panier = panierRepository.findByClientEmail(emailClient)
+                .orElseThrow(() -> new RuntimeException("Panier introuvable"));
+
+        if (panier.getLignes().isEmpty()) {
+            throw new RuntimeException("Impossible de valider un panier vide !");
+        }
+
+        Commande commande = new Commande();
+        commande.setClient((Client) panier.getClient());
+        commande.setDateCreation(LocalDateTime.now());
+        commande.setMontantTotal(panier.getMontantTotal());
+        commande.setStatut(StatutCommande.VALIDEE);
+
+        List<LigneCommande> lignesCommande = new ArrayList<>();
+
+        for (LignePanier lignePanier : panier.getLignes()) {
+            Produit produit = lignePanier.getProduit();
+
+            if (produit.getStock() == null || produit.getStock().getQuantiteDisponible() < lignePanier.getQuantite()) {
+                throw new RuntimeException("Rupture de stock pour le produit : " + produit.getNom());
+            }
+
+            produit.getStock().setQuantiteDisponible(
+                    produit.getStock().getQuantiteDisponible() - lignePanier.getQuantite()
+            );
+
+            LigneCommande lc = new LigneCommande();
+            lc.setCommande(commande);
+            lc.setProduit(produit);
+            lc.setQuantite(lignePanier.getQuantite());
+            lc.setSousTotal(lignePanier.getSousTotal());
+            lignesCommande.add(lc);
+        }
+        commande.setLignes(lignesCommande);
+        Commande savedCommande = commandeRepository.save(commande);
+
+        panier.getLignes().clear();
+        panier.setMontantTotal(0.0);
+        panierRepository.save(panier);
+        return mapToDTO(savedCommande);
+    }
+
+    @Transactional
+    public CommandeResponse mettreAJourStatut(Long commandeId, String nouveauStatut) {
+        Commande commande = commandeRepository.findById(commandeId)
+                .orElseThrow(() -> new RuntimeException("Commande introuvable"));
+        commande.setStatut(StatutCommande.valueOf(nouveauStatut.toUpperCase()));
+
+        Commande savedCommande = commandeRepository.save(commande);
+        return mapToDTO(savedCommande);
     }
 }

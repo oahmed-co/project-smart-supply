@@ -19,16 +19,15 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UtilisateurRepository utilisateurRepository;
 
-    public void creer(Utilisateur destinataire, String message) {
+    public void creer(Utilisateur destinataire, String message ,TypeNotification type) {
         Notification notif = Notification.builder()
                 .destinataire(destinataire)
                 .message(message)
                 .dateEnvoi(LocalDateTime.now())
-                .type(TypeNotification.NOUVELLE_COMMANDE) // Utilise une valeur de ton Enum
+                .type(type)
                 .build();
         notificationRepository.save(notif);
     }
-
 
     private NotificationResponse mapToResponse(Notification notification) {
         return NotificationResponse.builder()
@@ -39,8 +38,6 @@ public class NotificationService {
 
                 .build();
     }
-
-
 
     public List<NotificationResponse> getMesNotifications(String email) {
         Utilisateur user = utilisateurRepository.findByEmail(email)

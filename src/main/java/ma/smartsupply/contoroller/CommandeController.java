@@ -1,6 +1,8 @@
 package ma.smartsupply.contoroller;
 
 import ma.smartsupply.dto.CommandeRequest;
+import ma.smartsupply.dto.CommandeResponse;
+import ma.smartsupply.dto.UpdateStatutRequest;
 import ma.smartsupply.enums.StatutCommande;
 import ma.smartsupply.model.Commande;
 import ma.smartsupply.service.CommandeService;
@@ -46,6 +48,35 @@ public class CommandeController {
             @RequestParam StatutCommande statut) {
 
         Commande commandeMaj = commandeService.changerStatutCommande(id, statut);
+        return ResponseEntity.ok(commandeMaj);
+    }
+
+    @GetMapping("/mes-achats")
+    @PreAuthorize("hasAuthority('CLIENT')")
+    public ResponseEntity<List<CommandeResponse>> getMesAchats(Principal principal) {
+        return ResponseEntity.ok(commandeService.getMesAchats(principal.getName()));
+    }
+
+    @GetMapping("/mes-ventes")
+    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    public ResponseEntity<List<CommandeResponse>> getMesVentes(Principal principal) {
+        return ResponseEntity.ok(commandeService.getMesVentes(principal.getName()));
+    }
+
+    @PostMapping("/valider-panier")
+    @PreAuthorize("hasAuthority('CLIENT')")
+    public ResponseEntity<CommandeResponse> validerPanier(Principal principal) {
+        CommandeResponse commande = commandeService.validerPanier(principal.getName());
+        return ResponseEntity.ok(commande);
+    }
+
+    @PatchMapping("/{id}/statut")
+    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    public ResponseEntity<CommandeResponse> changerStatut(
+            @PathVariable Long id,
+            @RequestBody UpdateStatutRequest request
+    ) {
+        CommandeResponse commandeMaj = commandeService.mettreAJourStatut(id, request.getNouveauStatut());
         return ResponseEntity.ok(commandeMaj);
     }
 }

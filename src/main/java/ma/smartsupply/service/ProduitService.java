@@ -14,6 +14,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -123,4 +124,68 @@ public class ProduitService {
                 .alerteStock(isAlerte)
                 .build();
     }
+
+    @Transactional
+    public Stock ajouterStock(Long produitId, int quantiteAjoutee, String emailFournisseur) {
+        Produit produit = produitRepository.findById(produitId)
+                .orElseThrow(() -> new RuntimeException("Produit introuvable"));
+
+        if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
+            throw new RuntimeException("Accès refusé : Ce produit ne vous appartient pas.");
+        }
+
+        Stock stock = produit.getStock();
+        if (stock == null) {
+            throw new RuntimeException("Erreur : Aucun stock n'est associé à ce produit.");
+        }
+
+        int nouveauStock = stock.getQuantiteDisponible() + quantiteAjoutee;
+        stock.setQuantiteDisponible(nouveauStock);
+        stock.setDateDerniereMiseAJour(LocalDateTime.now());
+
+        return stockRepository.save(stock);
+    }
+
+    @Transactional
+    public void desactiverProduit(Long produitId, String emailFournisseur) {
+        Produit produit = produitRepository.findById(produitId)
+                .orElseThrow(() -> new RuntimeException("Produit introuvable avec l'ID : " + produitId));
+
+        if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
+            throw new RuntimeException("Accès refusé : Vous ne pouvez modifier que vos propres produits.");
+        }
+        produit.setActif(false);
+        produitRepository.save(produit);
+    }
+
+    public List<ProduitResponse> rechercherProduits(String motCle, boolean enStock) {
+        return produitRepository.rechercherProduits(motCle, enStock)
+                .stream()
+                .map(this::mapToProduitResponse)
+                .collect(Collectors.toList());
+    }
+
+    private ProduitResponse mapToProduitResponse(Produit produit) {
+        Integer quantite = 0;
+        boolean enAlerte = false;
+
+        if (produit.getStock() != null) {
+            quantite = produit.getStock().getQuantiteDisponible();
+            enAlerte = quantite <= produit.getStock().getSeuilAlerte();
+        }
+
+        String nomFourn = (produit.getFournisseur() != null) ? produit.getFournisseur().getNomEntreprise() : "Inconnu";
+
+        return ProduitResponse.builder()
+                .id(produit.getId())
+                .nom(produit.getNom())
+                .prix(produit.getPrix())
+                .description(produit.getDescription())
+                .image(produit.getImage())
+                .nomFournisseur(nomFourn)
+                .quantiteDisponible(quantite)
+                .alerteStock(enAlerte)
+                .build();
+    }
+
 }
