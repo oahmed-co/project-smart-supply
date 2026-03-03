@@ -1,8 +1,7 @@
-package ma.smartsupply.contoroller;
+package ma.smartsupply.controller;
 
 import ma.smartsupply.dto.ProduitRequest;
 import ma.smartsupply.dto.ProduitResponse;
-import ma.smartsupply.model.Produit;
 import ma.smartsupply.model.Stock;
 import ma.smartsupply.service.ProduitService;
 import lombok.RequiredArgsConstructor;
@@ -88,5 +87,14 @@ public class ProduitController {
         return ResponseEntity.ok(resultats);
     }
 
-
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    public ResponseEntity<ProduitResponse> modifierProduit(
+            @PathVariable Long id,
+            @RequestBody ProduitRequest request,
+            Principal principal
+    ) {
+        ProduitResponse produitMaj = produitService.modifierProduit(id, request, principal.getName());
+        return ResponseEntity.ok(produitMaj);
+    }
 }

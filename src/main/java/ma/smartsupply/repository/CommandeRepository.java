@@ -15,4 +15,6 @@ public interface CommandeRepository extends JpaRepository<Commande, Long> {
 
     List<Commande> findByClientEmail(String email);
     List<Commande> findDistinctByLignes_Produit_Fournisseur_Email(String email);
+
+    List<Commande> findByClientEmailAndStatut(String email, StatutCommande statut);
 }

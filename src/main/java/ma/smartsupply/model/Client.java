@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+
+import java.util.ArrayList; // <-- N'oublie pas cet import
 import java.util.List;
 
 @Entity
@@ -21,4 +23,12 @@ public class Client extends Utilisateur {
     @OneToMany(mappedBy = "client", cascade = CascadeType.ALL)
     @JsonIgnore
     private List<Commande> commandes;
+
+    @ManyToMany
+    @JoinTable(
+            name = "client_fournisseurs_favoris",
+            joinColumns = @JoinColumn(name = "client_id"),
+            inverseJoinColumns = @JoinColumn(name = "fournisseur_id")
+    )
+    private List<Fournisseur> fournisseursFavoris = new ArrayList<>();
 }

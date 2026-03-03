@@ -1,4 +1,4 @@
-package ma.smartsupply.contoroller;
+package ma.smartsupply.controller;
 
 import ma.smartsupply.dto.CommandeRequest;
 import ma.smartsupply.dto.CommandeResponse;
@@ -36,6 +36,19 @@ public class CommandeController {
         return ResponseEntity.ok(commandeService.validerCommande(id, principal.getName()));
     }
 
+    @PutMapping("/{id}/annuler")
+    @PreAuthorize("hasAuthority('CLIENT')")
+    public ResponseEntity<?> annulerCommande(
+            @PathVariable Long id,
+            Principal principal
+    ) {
+        try {
+            CommandeResponse commandeAnnulee = commandeService.annulerCommande(id, principal.getName());
+            return ResponseEntity.ok(commandeAnnulee);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
     @GetMapping
     public ResponseEntity<List<Commande>> getMesCommandes(Principal principal) {
         return ResponseEntity.ok(commandeService.getMesCommandes(principal.getName()));
@@ -51,10 +64,13 @@ public class CommandeController {
         return ResponseEntity.ok(commandeMaj);
     }
 
+
     @GetMapping("/mes-achats")
     @PreAuthorize("hasAuthority('CLIENT')")
-    public ResponseEntity<List<CommandeResponse>> getMesAchats(Principal principal) {
-        return ResponseEntity.ok(commandeService.getMesAchats(principal.getName()));
+    public ResponseEntity<List<CommandeResponse>> getMesAchats(
+            @RequestParam(required = false) StatutCommande statut,
+            Principal principal) {
+        return ResponseEntity.ok(commandeService.getMesAchats(principal.getName(), statut));
     }
 
     @GetMapping("/mes-ventes")

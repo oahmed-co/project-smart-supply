@@ -1,4 +1,4 @@
-package ma.smartsupply.contoroller;
+package ma.smartsupply.controller;
 
 import ma.smartsupply.dto.*;
 import ma.smartsupply.service.AuthenticationService;

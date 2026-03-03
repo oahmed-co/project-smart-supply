@@ -1,8 +1,7 @@
-package ma.smartsupply.contoroller;
+package ma.smartsupply.controller;
 
 import lombok.RequiredArgsConstructor;
 import ma.smartsupply.dto.NotificationResponse;
-import ma.smartsupply.model.Notification;
 import ma.smartsupply.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

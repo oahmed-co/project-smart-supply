@@ -1,4 +1,4 @@
-package ma.smartsupply.contoroller;
+package ma.smartsupply.controller;
 
 import lombok.RequiredArgsConstructor;
 import ma.smartsupply.model.Client;

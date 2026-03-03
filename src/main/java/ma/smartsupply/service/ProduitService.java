@@ -2,6 +2,7 @@ package ma.smartsupply.service;
 
 import ma.smartsupply.dto.ProduitRequest;
 import ma.smartsupply.dto.ProduitResponse;
+import ma.smartsupply.enums.TypeNotification;
 import ma.smartsupply.model.Fournisseur;
 import ma.smartsupply.model.Produit;
 import ma.smartsupply.model.Stock;
@@ -25,7 +26,7 @@ public class ProduitService {
     private final ProduitRepository produitRepository;
     private final StockRepository stockRepository;
     private final UtilisateurRepository utilisateurRepository;
-
+    private final NotificationService notificationService;
 
     @Transactional
     public ProduitResponse ajouterProduit(ProduitRequest request, String emailFournisseur) {
@@ -60,13 +61,11 @@ public class ProduitService {
         return mapToResponse(produit);
     }
 
-
     public List<ProduitResponse> getAllProduits() {
         return produitRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
-
 
     public List<ProduitResponse> getMesProduits(String emailFournisseur) {
         Utilisateur user = utilisateurRepository.findByEmail(emailFournisseur).orElseThrow();
@@ -76,10 +75,10 @@ public class ProduitService {
     }
 
 
+    @Transactional
     public ProduitResponse updateStock(Long produitId, Integer nouvelleQuantite, String emailFournisseur) {
         Produit produit = produitRepository.findById(produitId)
                 .orElseThrow(() -> new RuntimeException("Produit non trouvé"));
-
 
         if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
             throw new RuntimeException("Accès refusé à ce produit");
@@ -88,6 +87,17 @@ public class ProduitService {
         Stock stock = produit.getStock();
         stock.setQuantiteDisponible(nouvelleQuantite);
         stockRepository.save(stock);
+
+
+        if (stock.getSeuilAlerte() != null && nouvelleQuantite <= stock.getSeuilAlerte()) {
+            String messageAlerte = "⚠️ ALERTE : Votre produit '" + produit.getNom() +
+                    "' a atteint son seuil critique. Il ne reste que " +
+                    nouvelleQuantite + " unité(s) !";
+
+            notificationService.creer(produit.getFournisseur(), messageAlerte, TypeNotification.ALERTE_STOCK);
+        }
+
+
         return mapToResponse(produit);
     }
 
@@ -165,6 +175,25 @@ public class ProduitService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional
+    public ProduitResponse modifierProduit(Long produitId, ProduitRequest request, String emailFournisseur) {
+
+        Produit produit = produitRepository.findById(produitId)
+                .orElseThrow(() -> new RuntimeException("Produit introuvable avec l'ID : " + produitId));
+
+        if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
+            throw new RuntimeException("Accès refusé : Vous ne pouvez modifier que vos propres produits.");
+        }
+
+        if (request.getNom() != null) produit.setNom(request.getNom());
+        if (request.getPrix() != null) produit.setPrix(request.getPrix());
+        if (request.getDescription() != null) produit.setDescription(request.getDescription());
+        if (request.getImage() != null) produit.setImage(request.getImage());
+
+        Produit produitMaj = produitRepository.save(produit);
+
+        return mapToResponse(produitMaj);
+    }
     private ProduitResponse mapToProduitResponse(Produit produit) {
         Integer quantite = 0;
         boolean enAlerte = false;
@@ -187,5 +216,6 @@ public class ProduitService {
                 .alerteStock(enAlerte)
                 .build();
     }
+
 
 }

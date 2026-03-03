@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -128,6 +129,41 @@ public class CommandeService {
     }
 
     @Transactional
+    public CommandeResponse annulerCommande(Long commandeId, String emailClient) {
+        Commande commande = commandeRepository.findById(commandeId)
+                .orElseThrow(() -> new RuntimeException("Commande introuvable"));
+
+        if (!commande.getClient().getEmail().equals(emailClient)) {
+            throw new RuntimeException("Accès refusé : Vous n'êtes pas autorisé à annuler cette commande.");
+        }
+
+        if (commande.getStatut() != StatutCommande.EN_ATTENTE_VALIDATION) {
+            throw new RuntimeException("Impossible d'annuler : La commande est déjà en cours de traitement ou expédiée.");
+        }
+
+        LocalDateTime maintenant = LocalDateTime.now();
+
+        LocalDateTime dateCommande = commande.getDateCreation();
+
+        long heuresEcoulees = ChronoUnit.HOURS.between(dateCommande, maintenant);
+        if (heuresEcoulees > 24) {
+            throw new RuntimeException("Le délai de 24h pour annuler la commande est dépassé.");
+        }
+
+        commande.setStatut(StatutCommande.ANNULEE);
+
+        for (LigneCommande ligne : commande.getLignes()) {
+            Stock stock = stockRepository.findByProduitId(ligne.getProduit().getId())
+                    .orElseThrow(() -> new RuntimeException("Stock introuvable"));
+            stock.setQuantiteDisponible(stock.getQuantiteDisponible() + ligne.getQuantite());
+            stockRepository.save(stock);
+        }
+
+        commandeRepository.save(commande);
+        return mapToDTO(commande);
+    }
+
+    @Transactional
     public Commande changerStatutCommande(Long commandeId, StatutCommande nouveauStatut) {
 
         Commande commande = commandeRepository.findById(commandeId)
@@ -152,9 +188,16 @@ public class CommandeService {
         return commandeMiseAJour;
     }
 
-    public List<CommandeResponse> getMesAchats(String emailClient) {
-        return commandeRepository.findByClientEmail(emailClient)
-                .stream()
+    public List<CommandeResponse> getMesAchats(String emailClient, StatutCommande statut) {
+        List<Commande> commandes;
+
+        if (statut == null) {
+            commandes = commandeRepository.findByClientEmail(emailClient);
+        } else {
+            commandes = commandeRepository.findByClientEmailAndStatut(emailClient, statut);
+        }
+
+        return commandes.stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
     }
