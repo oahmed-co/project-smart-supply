@@ -15,7 +15,7 @@ public class DataSeeder {
     public CommandLineRunner initSuperAdmin(UtilisateurRepository utilisateurRepository, PasswordEncoder passwordEncoder) {
         return args -> {
 
-            String emailBoss = "ahmed@smartsupply.ma";
+            String emailBoss = "pfe@smartsupply.ma";
 
             if (utilisateurRepository.findByEmail(emailBoss).isEmpty()) {
 
@@ -33,7 +33,7 @@ public class DataSeeder {
                 utilisateurRepository.save(superAdmin);
                 System.out.println(" COMPTE SUPER ADMIN CRÉÉ AUTOMATIQUEMENT !");
                 System.out.println("Email: " + emailBoss);
-                System.out.println("Mot de passe: boss123");
+                System.out.println("Mot de passe: admin");
             } else {
                 System.out.println("✅ Le Super Admin existe déjà dans la base de données.");
             }

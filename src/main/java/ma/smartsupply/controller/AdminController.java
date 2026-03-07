@@ -36,4 +36,7 @@ public class AdminController {
         String etat = userMaj.isActif() ? "activé " : "désactivé";
         return ResponseEntity.ok("Le compte de l'utilisateur " + userMaj.getEmail() + " a été " + etat);
     }
+
+
+    
 }
