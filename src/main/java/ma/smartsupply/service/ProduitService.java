@@ -1,5 +1,6 @@
 package ma.smartsupply.service;
 
+import ma.smartsupply.dto.CatalogueResponse;
 import ma.smartsupply.dto.ProduitRequest;
 import ma.smartsupply.dto.ProduitResponse;
 import ma.smartsupply.enums.TypeNotification;
@@ -18,6 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @Service
 @RequiredArgsConstructor
@@ -74,7 +79,6 @@ public class ProduitService {
                 .collect(Collectors.toList());
     }
 
-
     @Transactional
     public ProduitResponse updateStock(Long produitId, Integer nouvelleQuantite, String emailFournisseur) {
         Produit produit = produitRepository.findById(produitId)
@@ -83,11 +87,9 @@ public class ProduitService {
         if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
             throw new RuntimeException("Accès refusé à ce produit");
         }
-
         Stock stock = produit.getStock();
         stock.setQuantiteDisponible(nouvelleQuantite);
         stockRepository.save(stock);
-
 
         if (stock.getSeuilAlerte() != null && nouvelleQuantite <= stock.getSeuilAlerte()) {
             String messageAlerte = "⚠️ ALERTE : Votre produit '" + produit.getNom() +
@@ -97,22 +99,18 @@ public class ProduitService {
             notificationService.creer(produit.getFournisseur(), messageAlerte, TypeNotification.ALERTE_STOCK);
         }
 
-
         return mapToResponse(produit);
     }
-
     private ProduitResponse mapToResponse(Produit p) {
         int quantite = 0;
         boolean isAlerte = false;
         String nomFournisseur = "Non assigné";
-
 
         if (p.getStock() != null) {
 
             if (p.getStock().getQuantiteDisponible() != null) {
                 quantite = p.getStock().getQuantiteDisponible();
             }
-
 
             int seuil = (p.getStock().getSeuilAlerte() != null) ? p.getStock().getSeuilAlerte() : 0;
 
@@ -122,7 +120,6 @@ public class ProduitService {
         if (p.getFournisseur() != null && p.getFournisseur().getNomEntreprise() != null) {
             nomFournisseur = p.getFournisseur().getNomEntreprise();
         }
-
         return ProduitResponse.builder()
                 .id(p.getId())
                 .nom(p.getNom())
@@ -148,7 +145,6 @@ public class ProduitService {
         if (stock == null) {
             throw new RuntimeException("Erreur : Aucun stock n'est associé à ce produit.");
         }
-
         int nouveauStock = stock.getQuantiteDisponible() + quantiteAjoutee;
         stock.setQuantiteDisponible(nouveauStock);
         stock.setDateDerniereMiseAJour(LocalDateTime.now());
@@ -168,11 +164,26 @@ public class ProduitService {
         produitRepository.save(produit);
     }
 
-    public List<ProduitResponse> rechercherProduits(String motCle, boolean enStock) {
-        return produitRepository.rechercherProduits(motCle, enStock)
-                .stream()
-                .map(this::mapToProduitResponse)
-                .collect(Collectors.toList());
+    public Page<ProduitResponse> rechercherProduitsAvecPagination(
+
+            String motCle,
+            boolean enStock,
+            int numeroPage,
+            int taillePage,
+            String trierPar,
+            String directionTri) {
+
+        Sort sort = directionTri.equalsIgnoreCase(Sort.Direction.ASC.name())
+                ? Sort.by(trierPar).ascending()
+                : Sort.by(trierPar).descending();
+
+        Pageable pageable = PageRequest.of(numeroPage, taillePage, sort);
+
+        Page<Produit> produitsPage = produitRepository.rechercherProduitsPagines(motCle, enStock, pageable);
+
+        return produitsPage.map(produit -> {
+            return mapToProduitResponse(produit);
+        });
     }
 
     @Transactional
@@ -202,7 +213,6 @@ public class ProduitService {
             quantite = produit.getStock().getQuantiteDisponible();
             enAlerte = quantite <= produit.getStock().getSeuilAlerte();
         }
-
         String nomFourn = (produit.getFournisseur() != null) ? produit.getFournisseur().getNomEntreprise() : "Inconnu";
 
         return ProduitResponse.builder()
@@ -216,6 +226,18 @@ public class ProduitService {
                 .alerteStock(enAlerte)
                 .build();
     }
+    public CatalogueResponse getCatalogueComplet() {
 
+        long total = produitRepository.count();
+        List<ProduitResponse> listeProduits = this.getAllProduits();
+
+        return new CatalogueResponse(total, listeProduits);
+    }
+
+    public CatalogueResponse getMesProduitsAvecTotal(String emailFournisseur) {
+        List<ProduitResponse> mesProduits = this.getMesProduits(emailFournisseur);
+        long total = mesProduits.size();
+        return new CatalogueResponse(total, mesProduits);
+    }
 
 }

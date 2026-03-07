@@ -23,7 +23,6 @@ public class Produit {
 
     private Integer quantiteStock;
     private Integer seuilAlerte;
-
     private boolean actif = true;
 
     @ManyToOne

@@ -61,4 +61,19 @@ public class AuthenticationService {
         var jwtToken = jwtService.generateToken(user);
         return AuthenticationResponse.builder().token(jwtToken).build();
     }
+
+    public Utilisateur creerNouvelAdmin(RegisterRequest request) {
+        if (utilisateurRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Cet email est déjà utilisé !");
+        }
+
+        Utilisateur nouvelAdmin = new Utilisateur();
+        nouvelAdmin.setNom(request.getNom());
+        nouvelAdmin.setEmail(request.getEmail());
+        nouvelAdmin.setMotDePasse(passwordEncoder.encode(request.getMotDePasse()));
+        nouvelAdmin.setRole(Role.ADMIN);
+        nouvelAdmin.setActif(true);
+
+        return utilisateurRepository.save(nouvelAdmin);
+    }
 }

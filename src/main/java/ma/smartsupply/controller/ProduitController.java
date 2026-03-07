@@ -1,5 +1,6 @@
 package ma.smartsupply.controller;
 
+import ma.smartsupply.dto.CatalogueResponse;
 import ma.smartsupply.dto.ProduitRequest;
 import ma.smartsupply.dto.ProduitResponse;
 import ma.smartsupply.model.Stock;
@@ -11,6 +12,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
+import org.springframework.data.domain.Page;
+
 
 @RestController
 @RequestMapping("/api/produits")
@@ -28,19 +31,16 @@ public class ProduitController {
         return ResponseEntity.ok(produitService.ajouterProduit(request, principal.getName()));
     }
 
-
     @GetMapping
     public ResponseEntity<List<ProduitResponse>> getAllProduits() {
         return ResponseEntity.ok(produitService.getAllProduits());
     }
-
 
     @GetMapping("/mes-produits")
     @PreAuthorize("hasRole('FOURNISSEUR')")
     public ResponseEntity<List<ProduitResponse>> getMesProduits(Principal principal) {
         return ResponseEntity.ok(produitService.getMesProduits(principal.getName()));
     }
-
 
     @PutMapping("/{id}/stock")
     @PreAuthorize("hasRole('FOURNISSEUR')")
@@ -77,13 +77,19 @@ public class ProduitController {
         return ResponseEntity.ok("Le produit a été retiré du catalogue avec succès.");
     }
 
-    @GetMapping("/recherche")
+    @GetMapping("/recherche-paginee")
     @PreAuthorize("hasAuthority('CLIENT')")
-    public ResponseEntity<List<ProduitResponse>> rechercherProduits(
+    public ResponseEntity<Page<ProduitResponse>> rechercherProduitsPagines(
             @RequestParam(required = false) String motCle,
-            @RequestParam(defaultValue = "false") boolean enStock
+            @RequestParam(defaultValue = "false") boolean enStock,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir
     ) {
-        List<ProduitResponse> resultats = produitService.rechercherProduits(motCle, enStock);
+        Page<ProduitResponse> resultats = produitService.rechercherProduitsAvecPagination(
+                motCle, enStock, page, size, sortBy, sortDir
+        );
         return ResponseEntity.ok(resultats);
     }
 
@@ -96,5 +102,10 @@ public class ProduitController {
     ) {
         ProduitResponse produitMaj = produitService.modifierProduit(id, request, principal.getName());
         return ResponseEntity.ok(produitMaj);
+    }
+
+    @GetMapping("/catalogue-complet")
+    public ResponseEntity<CatalogueResponse> getCatalogueComplet() {
+        return ResponseEntity.ok(produitService.getCatalogueComplet());
     }
 }
