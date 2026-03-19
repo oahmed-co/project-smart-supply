@@ -10,6 +10,39 @@ public class CommandeResponse {
     private LocalDateTime dateCreation;
     private double montantTotal;
     private String statut;
+    private String reference;
+    private String trackingReference;
+    private LocalDateTime dateLivraisonEstimee;
     private UtilisateurInfoDTO client;
     private List<LigneCommandeInfoDTO> lignes;
+
+    // Checkout Details
+    private String nomComplet;
+    private String telephone;
+    private String adresse;
+    private String ville;
+    private String region;
+    private String codePostal;
+    private String methodePaiement;
+    private String paymentMethod;
+    private String paymentStatus;
+    private String escrowStatus;
+    private LocalDateTime escrowHeldAt;
+    private LocalDateTime escrowReleasedAt;
+    private LocalDateTime refundedAt;
+    private String refundRequestStatus;
+    private LocalDateTime refundRequestedAt;
+    private String refundRequestMessage;
+    private String disputeCategory;
+    private String disputeReason;
+    private LocalDateTime disputeRaisedAt;
+    private Long supportSupplierId;
+    private String supportSupplierName;
+    private String supportSupplierCompany;
+    private boolean multipleSuppliersInOrder;
+    private Double amount;
+    private Double platformFee;
+    private Double supplierNetAmount;
+    private String facturePath;
+    private String invoicePath;
 }

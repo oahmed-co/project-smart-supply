@@ -1,6 +1,5 @@
 package ma.smartsupply.service;
 
-import ma.smartsupply.dto.CatalogueResponse;
 import ma.smartsupply.dto.ProduitRequest;
 import ma.smartsupply.dto.ProduitResponse;
 import ma.smartsupply.enums.TypeNotification;
@@ -8,6 +7,8 @@ import ma.smartsupply.model.Fournisseur;
 import ma.smartsupply.model.Produit;
 import ma.smartsupply.model.Stock;
 import ma.smartsupply.model.Utilisateur;
+import ma.smartsupply.model.Categorie;
+import ma.smartsupply.repository.CategorieRepository;
 import ma.smartsupply.repository.ProduitRepository;
 import ma.smartsupply.repository.StockRepository;
 import ma.smartsupply.repository.UtilisateurRepository;
@@ -19,10 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +29,9 @@ public class ProduitService {
     private final StockRepository stockRepository;
     private final UtilisateurRepository utilisateurRepository;
     private final NotificationService notificationService;
+    private final CategorieRepository categorieRepository;
+    private final ma.smartsupply.repository.LignePanierRepository lignePanierRepository;
+    private final ma.smartsupply.repository.LigneCommandeRepository ligneCommandeRepository;
 
     @Transactional
     public ProduitResponse ajouterProduit(ProduitRequest request, String emailFournisseur) {
@@ -44,14 +44,21 @@ public class ProduitService {
         }
         Fournisseur fournisseur = (Fournisseur) utilisateur;
 
-
         Produit produit = Produit.builder()
                 .nom(request.getNom())
                 .prix(request.getPrix())
                 .description(request.getDescription())
                 .image(request.getImage())
+                .quantiteMinimumCommande(
+                        request.getQuantiteMinimumCommande() != null ? request.getQuantiteMinimumCommande() : 1)
                 .fournisseur(fournisseur)
                 .build();
+
+        if (request.getCategorieId() != null) {
+            Categorie categorie = categorieRepository.findById(request.getCategorieId())
+                    .orElseThrow(() -> new RuntimeException("Catégorie introuvable"));
+            produit.setCategorie(categorie);
+        }
         produit = produitRepository.save(produit);
 
         Stock stock = Stock.builder()
@@ -63,19 +70,19 @@ public class ProduitService {
         stockRepository.save(stock);
         produit.setStock(stock);
 
-        return mapToResponse(produit);
+        return mapToProduitResponse(produit);
     }
 
     public List<ProduitResponse> getAllProduits() {
         return produitRepository.findAll().stream()
-                .map(this::mapToResponse)
+                .map(this::mapToProduitResponse)
                 .collect(Collectors.toList());
     }
 
     public List<ProduitResponse> getMesProduits(String emailFournisseur) {
         Utilisateur user = utilisateurRepository.findByEmail(emailFournisseur).orElseThrow();
         return produitRepository.findByFournisseurId(user.getId()).stream()
-                .map(this::mapToResponse)
+                .map(this::mapToProduitResponse)
                 .collect(Collectors.toList());
     }
 
@@ -87,6 +94,7 @@ public class ProduitService {
         if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
             throw new RuntimeException("Accès refusé à ce produit");
         }
+
         Stock stock = produit.getStock();
         stock.setQuantiteDisponible(nouvelleQuantite);
         stockRepository.save(stock);
@@ -99,38 +107,10 @@ public class ProduitService {
             notificationService.creer(produit.getFournisseur(), messageAlerte, TypeNotification.ALERTE_STOCK);
         }
 
-        return mapToResponse(produit);
+        return mapToProduitResponse(produit);
     }
-    private ProduitResponse mapToResponse(Produit p) {
-        int quantite = 0;
-        boolean isAlerte = false;
-        String nomFournisseur = "Non assigné";
 
-        if (p.getStock() != null) {
-
-            if (p.getStock().getQuantiteDisponible() != null) {
-                quantite = p.getStock().getQuantiteDisponible();
-            }
-
-            int seuil = (p.getStock().getSeuilAlerte() != null) ? p.getStock().getSeuilAlerte() : 0;
-
-            isAlerte = quantite <= seuil;
-        }
-
-        if (p.getFournisseur() != null && p.getFournisseur().getNomEntreprise() != null) {
-            nomFournisseur = p.getFournisseur().getNomEntreprise();
-        }
-        return ProduitResponse.builder()
-                .id(p.getId())
-                .nom(p.getNom())
-                .prix(p.getPrix())
-                .description(p.getDescription())
-                .image(p.getImage())
-                .nomFournisseur(nomFournisseur)
-                .quantiteDisponible(quantite)
-                .alerteStock(isAlerte)
-                .build();
-    }
+    // Removed mapToResponse as it's consolidated into mapToProduitResponse
 
     @Transactional
     public Stock ajouterStock(Long produitId, int quantiteAjoutee, String emailFournisseur) {
@@ -145,6 +125,7 @@ public class ProduitService {
         if (stock == null) {
             throw new RuntimeException("Erreur : Aucun stock n'est associé à ce produit.");
         }
+
         int nouveauStock = stock.getQuantiteDisponible() + quantiteAjoutee;
         stock.setQuantiteDisponible(nouveauStock);
         stock.setDateDerniereMiseAJour(LocalDateTime.now());
@@ -153,37 +134,22 @@ public class ProduitService {
     }
 
     @Transactional
-    public void desactiverProduit(Long produitId, String emailFournisseur) {
+    public void toggleStatutProduit(Long produitId, String emailFournisseur) {
         Produit produit = produitRepository.findById(produitId)
                 .orElseThrow(() -> new RuntimeException("Produit introuvable avec l'ID : " + produitId));
 
         if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
             throw new RuntimeException("Accès refusé : Vous ne pouvez modifier que vos propres produits.");
         }
-        produit.setActif(false);
+        produit.setActif(!produit.isActif());
         produitRepository.save(produit);
     }
 
-    public Page<ProduitResponse> rechercherProduitsAvecPagination(
-
-            String motCle,
-            boolean enStock,
-            int numeroPage,
-            int taillePage,
-            String trierPar,
-            String directionTri) {
-
-        Sort sort = directionTri.equalsIgnoreCase(Sort.Direction.ASC.name())
-                ? Sort.by(trierPar).ascending()
-                : Sort.by(trierPar).descending();
-
-        Pageable pageable = PageRequest.of(numeroPage, taillePage, sort);
-
-        Page<Produit> produitsPage = produitRepository.rechercherProduitsPagines(motCle, enStock, pageable);
-
-        return produitsPage.map(produit -> {
-            return mapToProduitResponse(produit);
-        });
+    public List<ProduitResponse> rechercherProduits(String motCle, boolean enStock) {
+        return produitRepository.rechercherProduits(motCle, enStock)
+                .stream()
+                .map(this::mapToProduitResponse)
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -196,48 +162,110 @@ public class ProduitService {
             throw new RuntimeException("Accès refusé : Vous ne pouvez modifier que vos propres produits.");
         }
 
-        if (request.getNom() != null) produit.setNom(request.getNom());
-        if (request.getPrix() != null) produit.setPrix(request.getPrix());
-        if (request.getDescription() != null) produit.setDescription(request.getDescription());
-        if (request.getImage() != null) produit.setImage(request.getImage());
+        if (request.getNom() != null)
+            produit.setNom(request.getNom());
+        if (request.getPrix() != null)
+            produit.setPrix(request.getPrix());
+        if (request.getDescription() != null)
+            produit.setDescription(request.getDescription());
+        if (request.getImage() != null)
+            produit.setImage(request.getImage());
+        if (request.getQuantiteMinimumCommande() != null)
+            produit.setQuantiteMinimumCommande(request.getQuantiteMinimumCommande());
+
+        if (request.getCategorieId() != null) {
+            Categorie categorie = categorieRepository.findById(request.getCategorieId())
+                    .orElseThrow(() -> new RuntimeException("Catégorie introuvable"));
+            produit.setCategorie(categorie);
+        }
 
         Produit produitMaj = produitRepository.save(produit);
 
-        return mapToResponse(produitMaj);
+        return mapToProduitResponse(produitMaj);
     }
-    private ProduitResponse mapToProduitResponse(Produit produit) {
-        Integer quantite = 0;
-        boolean enAlerte = false;
 
-        if (produit.getStock() != null) {
-            quantite = produit.getStock().getQuantiteDisponible();
-            enAlerte = quantite <= produit.getStock().getSeuilAlerte();
+    @Transactional
+    public void supprimerProduit(Long produitId, String emailFournisseur) {
+        Produit produit = produitRepository.findById(produitId)
+                .orElseThrow(() -> new RuntimeException("Produit introuvable avec l'ID : " + produitId));
+
+        if (!produit.getFournisseur().getEmail().equals(emailFournisseur)) {
+            throw new RuntimeException("Accès refusé : Vous ne pouvez supprimer que vos propres produits.");
         }
-        String nomFourn = (produit.getFournisseur() != null) ? produit.getFournisseur().getNomEntreprise() : "Inconnu";
+
+        // Vérifier si le produit est lié à des commandes existantes
+        if (ligneCommandeRepository.existsByProduitId(produitId)) {
+            throw new IllegalStateException(
+                    "Ce produit ne peut pas être supprimé car il est lié à des commandes existantes. Veuillez le désactiver à la place.");
+        }
+
+        // Supprimer les lignes de panier liées à ce produit (les paniers sont
+        // temporaires)
+        lignePanierRepository.deleteByProduitId(produitId);
+
+        // Supprimer l'image associée si elle existe
+        if (produit.getImage() != null && !produit.getImage().isEmpty()) {
+            try {
+                String fileName = produit.getImage().substring(produit.getImage().lastIndexOf("/") + 1);
+                java.nio.file.Path imagePath = java.nio.file.Paths.get("uploads/produits").resolve(fileName);
+                java.nio.file.Files.deleteIfExists(imagePath);
+            } catch (Exception e) {
+                // Ignorer l'erreur de suppression d'image pour ne pas bloquer la suppression du
+                // produit
+                System.err.println("Erreur lors de la suppression de l'image du produit : " + e.getMessage());
+            }
+        }
+
+        produitRepository.delete(produit);
+    }
+
+    private ProduitResponse mapToProduitResponse(Produit p) {
+        int quantite = 0;
+        boolean isAlerte = false;
+        String nomFournisseur = "Non assigné";
+
+        if (p.getStock() != null) {
+            if (p.getStock().getQuantiteDisponible() != null) {
+                quantite = p.getStock().getQuantiteDisponible();
+            }
+            int seuil = (p.getStock().getSeuilAlerte() != null) ? p.getStock().getSeuilAlerte() : 0;
+            isAlerte = quantite <= seuil;
+        }
+
+        if (p.getFournisseur() != null && p.getFournisseur().getNomEntreprise() != null) {
+            nomFournisseur = p.getFournisseur().getNomEntreprise();
+        }
 
         return ProduitResponse.builder()
-                .id(produit.getId())
-                .nom(produit.getNom())
-                .prix(produit.getPrix())
-                .description(produit.getDescription())
-                .image(produit.getImage())
-                .nomFournisseur(nomFourn)
+                .id(p.getId())
+                .nom(p.getNom())
+                .prix(p.getPrix())
+                .description(p.getDescription())
+                .image(p.getImage())
+                .nomFournisseur(nomFournisseur)
+                .fournisseurId(p.getFournisseur() != null ? p.getFournisseur().getId() : null)
+                .categorieId(p.getCategorie() != null ? p.getCategorie().getId() : null)
+                .categorieNom(p.getCategorie() != null ? p.getCategorie().getNom() : null)
                 .quantiteDisponible(quantite)
-                .alerteStock(enAlerte)
+                .quantiteMinimumCommande(p.getQuantiteMinimumCommande() != null ? p.getQuantiteMinimumCommande() : 1)
+                .alerteStock(isAlerte)
+                .actif(p.isActif())
                 .build();
     }
-    public CatalogueResponse getCatalogueComplet() {
 
-        long total = produitRepository.count();
-        List<ProduitResponse> listeProduits = this.getAllProduits();
-
-        return new CatalogueResponse(total, listeProduits);
-    }
-
-    public CatalogueResponse getMesProduitsAvecTotal(String emailFournisseur) {
-        List<ProduitResponse> mesProduits = this.getMesProduits(emailFournisseur);
-        long total = mesProduits.size();
-        return new CatalogueResponse(total, mesProduits);
+    public List<ProduitResponse> getRestockSuggestions(String emailFournisseur) {
+        Utilisateur user = utilisateurRepository.findByEmail(emailFournisseur).orElseThrow();
+        return produitRepository.findByFournisseurId(user.getId()).stream()
+                .filter(p -> p.getStock() != null &&
+                        p.getStock().getQuantiteDisponible() != null &&
+                        p.getStock().getSeuilAlerte() != null &&
+                        p.getStock().getQuantiteDisponible() <= (p.getStock().getSeuilAlerte() * 1.5)) // Suggest if
+                // quantity is
+                // below 150% of
+                // alert
+                // threshold
+                .map(this::mapToProduitResponse)
+                .collect(Collectors.toList());
     }
 
 }

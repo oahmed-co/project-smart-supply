@@ -46,6 +46,12 @@ public class PanierService {
                 .filter(ligne -> ligne.getProduit().getId().equals(produitId))
                 .findFirst();
 
+        int totalQuantite = ligneExistante.isPresent() ? ligneExistante.get().getQuantite() + quantite : quantite;
+        int minCommande = produit.getQuantiteMinimumCommande() != null ? produit.getQuantiteMinimumCommande() : 1;
+        if (totalQuantite < minCommande && quantite > 0) {
+            throw new RuntimeException("La quantité minimum de commande pour ce produit est de " + minCommande);
+        }
+
         if (ligneExistante.isPresent()) {
 
             LignePanier ligne = ligneExistante.get();
@@ -81,17 +87,18 @@ public class PanierService {
 
         Panier panier = panierOpt.get();
 
-        List<LignePanierResponse> lignesDto = panier.getLignes().stream().map(ligne ->
-                LignePanierResponse.builder()
-                        .id(ligne.getId())
-                        .produitId(ligne.getProduit().getId())
-                        .nomProduit(ligne.getProduit().getNom())
-                        .image(ligne.getProduit().getImage())
-                        .prixUnitaire(ligne.getProduit().getPrix())
-                        .quantite(ligne.getQuantite())
-                        .sousTotal(ligne.getSousTotal())
-                        .build()
-        ).collect(Collectors.toList());
+        List<LignePanierResponse> lignesDto = panier.getLignes().stream().map(ligne -> LignePanierResponse.builder()
+                .id(ligne.getId())
+                .produitId(ligne.getProduit().getId())
+                .nomProduit(ligne.getProduit().getNom())
+                .image(ligne.getProduit().getImage())
+                .prixUnitaire(ligne.getProduit().getPrix())
+                .quantite(ligne.getQuantite())
+                .quantiteMinimumCommande(ligne.getProduit().getQuantiteMinimumCommande() != null
+                        ? ligne.getProduit().getQuantiteMinimumCommande()
+                        : 1)
+                .sousTotal(ligne.getSousTotal())
+                .build()).collect(Collectors.toList());
 
         return PanierResponse.builder()
                 .id(panier.getId())
@@ -100,5 +107,69 @@ public class PanierService {
                 .build();
     }
 
-}
+    @Transactional
+    public PanierResponse updateQuantite(String emailClient, Long produitId, int nouvelleQuantite) {
+        Panier panier = panierRepository.findByClientEmail(emailClient)
+                .orElseThrow(() -> new RuntimeException("Panier introuvable"));
 
+        Optional<LignePanier> ligneOpt = panier.getLignes().stream()
+                .filter(l -> l.getProduit().getId().equals(produitId))
+                .findFirst();
+
+        if (ligneOpt.isEmpty()) {
+            throw new RuntimeException("Produit introuvable dans le panier");
+        }
+
+        LignePanier ligne = ligneOpt.get();
+        Produit produit = ligne.getProduit();
+
+        if (produit.getStock() == null || produit.getStock().getQuantiteDisponible() < nouvelleQuantite) {
+            throw new RuntimeException("Stock insuffisant pour cette quantité");
+        }
+
+        int minCommande = produit.getQuantiteMinimumCommande() != null ? produit.getQuantiteMinimumCommande() : 1;
+        if (nouvelleQuantite > 0 && nouvelleQuantite < minCommande) {
+            throw new RuntimeException("La quantité minimum de commande pour ce produit est de " + minCommande);
+        }
+
+        if (nouvelleQuantite <= 0) {
+            panier.getLignes().remove(ligne);
+        } else {
+            ligne.setQuantite(nouvelleQuantite);
+            ligne.setSousTotal(nouvelleQuantite * produit.getPrix());
+        }
+
+        recalculerTotalPanier(panier);
+        panierRepository.save(panier);
+        return getMonPanier(emailClient);
+    }
+
+    @Transactional
+    public PanierResponse supprimerItem(String emailClient, Long produitId) {
+        Panier panier = panierRepository.findByClientEmail(emailClient)
+                .orElseThrow(() -> new RuntimeException("Panier introuvable"));
+
+        panier.getLignes().removeIf(l -> l.getProduit().getId().equals(produitId));
+        recalculerTotalPanier(panier);
+        panierRepository.save(panier);
+        return getMonPanier(emailClient);
+    }
+
+    @Transactional
+    public PanierResponse viderPanier(String emailClient) {
+        Panier panier = panierRepository.findByClientEmail(emailClient)
+                .orElseThrow(() -> new RuntimeException("Panier introuvable"));
+
+        panier.getLignes().clear();
+        panier.setMontantTotal(0.0);
+        panierRepository.save(panier);
+        return getMonPanier(emailClient);
+    }
+
+    private void recalculerTotalPanier(Panier panier) {
+        double total = panier.getLignes().stream()
+                .mapToDouble(LignePanier::getSousTotal)
+                .sum();
+        panier.setMontantTotal(total);
+    }
+}

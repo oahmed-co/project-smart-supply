@@ -22,7 +22,6 @@ public class AuthenticationService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
-
     public AuthenticationResponse register(RegisterRequest request) {
         Utilisateur user;
 
@@ -55,25 +54,9 @@ public class AuthenticationService {
 
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getMotDePasse())
-        );
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getMotDePasse()));
         var user = utilisateurRepository.findByEmail(request.getEmail()).orElseThrow();
         var jwtToken = jwtService.generateToken(user);
         return AuthenticationResponse.builder().token(jwtToken).build();
-    }
-
-    public Utilisateur creerNouvelAdmin(RegisterRequest request) {
-        if (utilisateurRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Cet email est déjà utilisé !");
-        }
-
-        Utilisateur nouvelAdmin = new Utilisateur();
-        nouvelAdmin.setNom(request.getNom());
-        nouvelAdmin.setEmail(request.getEmail());
-        nouvelAdmin.setMotDePasse(passwordEncoder.encode(request.getMotDePasse()));
-        nouvelAdmin.setRole(Role.ADMIN);
-        nouvelAdmin.setActif(true);
-
-        return utilisateurRepository.save(nouvelAdmin);
     }
 }

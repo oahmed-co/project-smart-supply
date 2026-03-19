@@ -18,23 +18,23 @@ public class FavorisController {
     private final FavorisService favorisService;
 
     @PostMapping("/ajouter/{idFournisseur}")
-    @PreAuthorize("hasAuthority('CLIENT')")
-    public ResponseEntity<String> ajouterFavori(@PathVariable Long idFournisseur, Principal principal) {
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<String> ajouterFavori(@PathVariable("idFournisseur") Long idFournisseur,
+                                                Principal principal) {
         favorisService.ajouterFavori(principal.getName(), idFournisseur);
         return ResponseEntity.ok("Fournisseur ajouté à votre annuaire avec succès ! ⭐");
     }
 
-
     @DeleteMapping("/retirer/{idFournisseur}")
-    @PreAuthorize("hasAuthority('CLIENT')")
-    public ResponseEntity<String> retirerFavori(@PathVariable Long idFournisseur, Principal principal) {
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<String> retirerFavori(@PathVariable("idFournisseur") Long idFournisseur,
+                                                Principal principal) {
         favorisService.retirerFavori(principal.getName(), idFournisseur);
         return ResponseEntity.ok("Fournisseur retiré de votre annuaire.");
     }
 
-
     @GetMapping("/mes-fournisseurs")
-    @PreAuthorize("hasAuthority('CLIENT')")
+    @PreAuthorize("hasRole('CLIENT')")
     public ResponseEntity<List<Fournisseur>> getMesFavoris(Principal principal) {
         List<Fournisseur> favoris = favorisService.getMesFavoris(principal.getName());
         return ResponseEntity.ok(favoris);

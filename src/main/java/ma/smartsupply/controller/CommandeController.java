@@ -1,8 +1,11 @@
 package ma.smartsupply.controller;
 
+import ma.smartsupply.dto.CheckoutRequest;
 import ma.smartsupply.dto.CommandeRequest;
 import ma.smartsupply.dto.CommandeResponse;
+import ma.smartsupply.dto.RaiseDisputeRequest;
 import ma.smartsupply.dto.UpdateStatutRequest;
+import ma.smartsupply.dto.UpdateTrackingRequest;
 import ma.smartsupply.enums.StatutCommande;
 import ma.smartsupply.model.Commande;
 import ma.smartsupply.service.CommandeService;
@@ -22,26 +25,24 @@ public class CommandeController {
     private final CommandeService commandeService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('CLIENT')")
+    @PreAuthorize("hasRole('CLIENT')")
     public ResponseEntity<Commande> passerCommande(@RequestBody CommandeRequest request) {
         return ResponseEntity.ok(commandeService.passerCommande(request));
     }
 
     @PutMapping("/{id}/valider")
-    @PreAuthorize("hasAuthority('FOURNISSEUR')")
-    public ResponseEntity<Commande> validerCommande(
-            @PathVariable Long id,
-            Principal principal
-    ) {
-        return ResponseEntity.ok(commandeService.validerCommande(id, principal.getName()));
+    @PreAuthorize("hasRole('FOURNISSEUR')")
+    public ResponseEntity<CommandeResponse> validerCommande(
+            @PathVariable("id") Long id,
+            Principal principal) {
+        return ResponseEntity.ok(commandeService.mettreAJourStatut(id, StatutCommande.VALIDEE.name(), principal.getName()));
     }
 
     @PutMapping("/{id}/annuler")
-    @PreAuthorize("hasAuthority('CLIENT')")
+    @PreAuthorize("hasRole('CLIENT')")
     public ResponseEntity<?> annulerCommande(
-            @PathVariable Long id,
-            Principal principal
-    ) {
+            @PathVariable("id") Long id,
+            Principal principal) {
         try {
             CommandeResponse commandeAnnulee = commandeService.annulerCommande(id, principal.getName());
             return ResponseEntity.ok(commandeAnnulee);
@@ -49,50 +50,85 @@ public class CommandeController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
     @GetMapping
     public ResponseEntity<List<Commande>> getMesCommandes(Principal principal) {
         return ResponseEntity.ok(commandeService.getMesCommandes(principal.getName()));
     }
 
     @PutMapping("/{id}/statut")
-    @PreAuthorize("hasAuthority('FOURNISSEUR')")
-    public ResponseEntity<Commande> changerStatut(
-            @PathVariable Long id,
-            @RequestParam StatutCommande statut) {
-
-        Commande commandeMaj = commandeService.changerStatutCommande(id, statut);
+    @PreAuthorize("hasAnyRole('FOURNISSEUR', 'ADMIN')")
+    public ResponseEntity<CommandeResponse> changerStatut(
+            @PathVariable("id") Long id,
+            @RequestParam("statut") StatutCommande statut,
+            Principal principal) {
+        CommandeResponse commandeMaj = commandeService.mettreAJourStatut(id, statut.name(), principal.getName());
         return ResponseEntity.ok(commandeMaj);
     }
 
-
     @GetMapping("/mes-achats")
-    @PreAuthorize("hasAuthority('CLIENT')")
+    @PreAuthorize("hasRole('CLIENT')")
     public ResponseEntity<List<CommandeResponse>> getMesAchats(
-            @RequestParam(required = false) StatutCommande statut,
+            @RequestParam(name = "statut", required = false) StatutCommande statut,
             Principal principal) {
         return ResponseEntity.ok(commandeService.getMesAchats(principal.getName(), statut));
     }
 
     @GetMapping("/mes-ventes")
-    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    @PreAuthorize("hasRole('FOURNISSEUR')")
     public ResponseEntity<List<CommandeResponse>> getMesVentes(Principal principal) {
         return ResponseEntity.ok(commandeService.getMesVentes(principal.getName()));
     }
 
     @PostMapping("/valider-panier")
-    @PreAuthorize("hasAuthority('CLIENT')")
-    public ResponseEntity<CommandeResponse> validerPanier(Principal principal) {
-        CommandeResponse commande = commandeService.validerPanier(principal.getName());
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<CommandeResponse> validerPanier(
+            @RequestBody CheckoutRequest checkoutRequest,
+            Principal principal) {
+        CommandeResponse commande = commandeService.validerPanier(principal.getName(), checkoutRequest);
         return ResponseEntity.ok(commande);
     }
 
     @PatchMapping("/{id}/statut")
-    @PreAuthorize("hasAuthority('FOURNISSEUR')")
+    @PreAuthorize("hasAnyRole('FOURNISSEUR', 'ADMIN')")
     public ResponseEntity<CommandeResponse> changerStatut(
-            @PathVariable Long id,
-            @RequestBody UpdateStatutRequest request
-    ) {
-        CommandeResponse commandeMaj = commandeService.mettreAJourStatut(id, request.getNouveauStatut());
+            @PathVariable("id") Long id,
+            @RequestBody UpdateStatutRequest request,
+            Principal principal) {
+        CommandeResponse commandeMaj = commandeService.mettreAJourStatut(id, request.getNouveauStatut(),
+                principal.getName());
         return ResponseEntity.ok(commandeMaj);
+    }
+
+    @PatchMapping("/{id}/tracking")
+    @PreAuthorize("hasAnyRole('FOURNISSEUR', 'ADMIN')")
+    public ResponseEntity<CommandeResponse> updateTracking(
+            @PathVariable("id") Long id,
+            @RequestBody UpdateTrackingRequest request,
+            Principal principal) {
+        CommandeResponse commandeMaj = commandeService.updateTracking(id, request, principal.getName());
+        return ResponseEntity.ok(commandeMaj);
+    }
+
+    @PatchMapping("/{id}/escrow/dispute")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    public ResponseEntity<CommandeResponse> markEscrowDisputed(
+            @PathVariable("id") Long id,
+            @RequestBody RaiseDisputeRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(commandeService.marquerEscrowEnLitige(id, request, principal.getName()));
+    }
+
+    @PatchMapping("/{id}/refund-request")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<CommandeResponse> openRefundRequest(
+            @PathVariable("id") Long id,
+            Principal principal) {
+        return ResponseEntity.ok(commandeService.ouvrirDemandeRemboursement(id, principal.getName()));
+    }
+
+    @GetMapping("/{id}/facture")
+    public ResponseEntity<?> telechargerFacture(@PathVariable("id") Long id) {
+        return commandeService.telechargerFacture(id);
     }
 }

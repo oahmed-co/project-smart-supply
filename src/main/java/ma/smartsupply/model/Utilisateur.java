@@ -1,6 +1,5 @@
 package ma.smartsupply.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,39 +20,39 @@ import java.util.List;
 @SuperBuilder
 @Inheritance(strategy = InheritanceType.JOINED)
 @Table(name = "utilisateurs")
-public class Utilisateur implements UserDetails {
+public abstract class Utilisateur implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     private String nom;
 
     @Column(unique = true, nullable = false)
     private String email;
-    @JsonIgnore
     private String motDePasse;
     private String telephone;
     private String adresse;
     private String tokenNotification;
-    private boolean actif = true;
+    private String image;
     @Enumerated(EnumType.STRING)
     private Role role;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
 
-        return List.of(new SimpleGrantedAuthority(this.role.name()));
+        return List.of(new SimpleGrantedAuthority("ROLE_" + this.role.name()));
     }
 
     @Override
-    public boolean isEnabled() {
-        return this.actif;
-    }
-    @Override
     public String getPassword() {
+
         return this.motDePasse;
     }
+
     @Override
     public String getUsername() {
+
         return this.email;
     }
 
@@ -72,5 +71,8 @@ public class Utilisateur implements UserDetails {
         return true;
     }
 
-
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
 }

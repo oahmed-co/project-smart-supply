@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import lombok.Builder;
 
 import java.util.ArrayList; // <-- N'oublie pas cet import
 import java.util.List;
@@ -25,10 +26,7 @@ public class Client extends Utilisateur {
     private List<Commande> commandes;
 
     @ManyToMany
-    @JoinTable(
-            name = "client_fournisseurs_favoris",
-            joinColumns = @JoinColumn(name = "client_id"),
-            inverseJoinColumns = @JoinColumn(name = "fournisseur_id")
-    )
+    @JoinTable(name = "client_fournisseurs_favoris", joinColumns = @JoinColumn(name = "client_id"), inverseJoinColumns = @JoinColumn(name = "fournisseur_id"))
+    @Builder.Default
     private List<Fournisseur> fournisseursFavoris = new ArrayList<>();
 }
